@@ -56,6 +56,7 @@ void setup() {
 
   // interrupts setup
   attachInterrupt(digitalPinToInterrupt(BTN_START), startStopISR, FALLING);
+  attachInterrupt(digitalPinToInterrupt(BTN_DIFF), diffSwitchISR, FALLING);
 }
 
 void loop() {
@@ -109,7 +110,25 @@ void startStopISR() { // interrupt routine for the Start/Stop button
 }
 
 void diffSwitchISR() { // difficulty switch interrupt routine
-
+  interruptTime = millis();
+  if (interruptTime - lastInterruptTime > debounceDelay) { // debouncing
+    difficulty += 1 ;
+    if(difficulty >= 4) difficulty = 1;
+    switch(difficulty) {
+      case 1:
+        Serial.println("Easy mode ON. Have fun.");
+        break;
+      case 2:
+        Serial.println("Medium mode ON. Ready for a challenge?");
+        break;
+      case 3:
+        Serial.println("Hard mode ON. Prepare to lose.");
+        break;
+      default:
+        Serial.println("Error: difficulty variable out of range.");
+    }
+  }
+  lastInterruptTime = interruptTime;
 }
 
 const char* getRandomString(const char* wordList[], int size) { // returns a random word from a string array
