@@ -1,6 +1,5 @@
 #include <Arduino.h>
 #include <string.h>
-#include <stdlib.h>
 
 // define pins
 #define RED_PIN 5
@@ -11,16 +10,25 @@
 
 // define other stuff
 #define MAX_STRING_LENGTH 25
+#define MAX_STRINGS 100
 
 // global vars
 int score = 0;
 unsigned long gameTime;
 int gameDuration = 30000;
-volatile int difficulty;
-volatile int gameStarted = 0;
+volatile int difficulty = 0; // intervals: easy - 5s, medium - 3s, hard - 1.5s
+volatile int gameJustStarted = 0, gameOn = 0;
 const int blinkDuration = 3000;
 const int blinkInterval = 500;
-
+const char* words[] = {
+    "inquiry", "illustrate", "performer", "survey", "role", "admire", "hand", "accident",
+    "situation", "factory", "ignore", "guerilla", "dragon", "face", "exit", "bounce",
+    "mosaic", "unanimous", "gravel", "square", "house", "realism", "mountain", "trust",
+    "denial", "wall", "action", "golf", "storage", "positive", "metal", "map", "arch",
+    "crew", "improvement", "chicken", "banquet", "temperature", "composer", "confusion",
+    "reproduction", "coverage", "exaggeration", "profession", "preference", "preparation",
+    "practice", "equinox", "trench", "crutch"
+};
 
 // debouncing vars
 int btnState = 0, lasBtnState = 0;
@@ -31,30 +39,37 @@ volatile unsigned long interruptTime, lastInterruptTime = 0;
 // function headers
 void setRGB(int x);
 void startStopISR();
-int loadStrings(const char* filename, char strings[][MAX_STRING_LENGTH], int maxStrings);
-void getRandomString(char strings[][MAX_STRING_LENGTH], int count);
+void diffSwitchISR();
+const char* getRandomString(const char* wordList[], int size);
 void startGame();
+void game();
 
 void setup() {
   // pin mode setups
-  for(int pin=RED_PIN; pin<=BLUE_PIN; pin++) pinMode(pin, OUTPUT);
+  for (int pin = RED_PIN; pin <= BLUE_PIN; pin++) pinMode(pin, OUTPUT);
 
   // serial monitor setup
   Serial.begin(9600);
 
-  // interrupts setup
-  attachInterrupt(digitalPinToInterrupt(BTN_START), startStopISR, FALLING);
-
   // initial state setup
   setRGB(4); // turn the LED white
+
+  // interrupts setup
+  attachInterrupt(digitalPinToInterrupt(BTN_START), startStopISR, FALLING);
 }
 
 void loop() {
-  if(gameStarted) startGame();
+  if (gameJustStarted) {
+    startGame(); // Start game logic
+  }
+  
+  if (gameOn) {
+    game(); // Continue game logic
+  }
 }
 
 void setRGB(int x) { // function to set RGB LED to a color
-  switch(x) {
+  switch (x) {
     case 0: // turned off
       digitalWrite(RED_PIN, LOW);
       digitalWrite(GREEN_PIN, LOW);
@@ -88,44 +103,27 @@ void setRGB(int x) { // function to set RGB LED to a color
 void startStopISR() { // interrupt routine for the Start/Stop button
   interruptTime = millis();
   if (interruptTime - lastInterruptTime > debounceDelay) { // debouncing
-    gameStarted = 1;
+    gameJustStarted = 1;
   }
   lastInterruptTime = interruptTime;
 }
 
-/*  function: loadStrings()
-    - loads strings from a file into memory 
-    - returns: INT count (quantity of read strings) or -1 (on error)
-*/
-int loadStrings(const char* filename, char strings[][MAX_STRING_LENGTH], int maxStrings) {
-  FILE *file = fopen(filename, "r");
-  if(file == NULL) {
-    Serial.println("Error: cannot open file.");
-    return -1;
-  }
+void diffSwitchISR() { // difficulty switch interrupt routine
 
-  int count = 0;
-  while(count < maxStrings && fscanf(file, "%49s", strings[count])) count++;
-  fclose(file);
-  return count;
 }
 
-void getRandomString(char* stringVar,char strings[][MAX_STRING_LENGTH], int count) {
-  if(count <= 0) {
-    Serial.println("Error: the provided file is empty.");
-    return;
-  }
-  int randomIndex =  random(count);
-  strcpy(stringVar, strings[randomIndex]);
+const char* getRandomString(const char* wordList[], int size) { // returns a random word from a string array
+  int randomIndex = random(size);
+  return wordList[randomIndex];
 }
 
-void startGame() {
+void startGame() { // blink loop at the beginning of the game
   static unsigned long startTime = 0;
   static unsigned long lastTime = 0;
   static int blinking = 0, state = 0;
   static int i = 3;
 
-  if(!blinking) {
+  if (!blinking) {
     blinking = 1;
     startTime = millis();
     lastTime = millis();
@@ -133,25 +131,63 @@ void startGame() {
     Serial.println("Game starting...\n");
   }
 
-  if(millis() - startTime >= blinkDuration) {
-    setRGB(2);
-    blinking = 0;
-    gameStarted = 0;
+  if (millis() - startTime >= blinkDuration) {
     Serial.println("START!");
-    return;
+    blinking = 0;
+    gameJustStarted = 0; // Reset the start flag
+    gameOn = 1; // Allow the game loop to run
   }
 
-  if(millis() - lastTime >= blinkInterval) {
+  if (millis() - lastTime >= blinkInterval) {
     lastTime = millis();
-    if(!state) {
-      setRGB(4);
+    if (!state) {
+      setRGB(4); // turn the LED white
       state = 1;
       Serial.print(i);
       Serial.print("...\n");
       i--;
     } else {
-      setRGB(0);
+      setRGB(0); // turn the LED off
       state = 0;
     }
+  }
+}
+
+void game() { // main game loop
+  unsigned long typeTime;
+  switch (difficulty) {
+    case 1:
+      typeTime = 5000; // easy - 5 seconds
+      break;
+    case 2:
+      typeTime = 3000; // medium - 3 seconds
+      break;
+    case 3:
+      typeTime = 1500; // hard - 1.5 seconds
+      break;
+    default:
+      typeTime = 2000; // for testing purposes
+  }
+
+  static unsigned long lastPrintTime = 0;
+  static unsigned long gameStartTime = millis();  // Record the game start time
+
+  // Set LED to green while the game is on and generating words
+  setRGB(2);  // Set LED to green
+
+  // Check if the game has exceeded its duration
+  if (millis() - gameStartTime >= gameDuration) {
+    gameOn = 0;  // End the game
+    setRGB(4);   // Turn the LED white again
+    Serial.println("Game Over!");
+    return;  // Exit the game function, stop word generation
+  }
+
+  // Generate a word at the specified interval
+  if (millis() - lastPrintTime >= typeTime) {
+    int size = sizeof(words) / sizeof(words[0]);
+    const char* word = getRandomString(words, size); // Get random word
+    Serial.println(word); // Print the random word
+    lastPrintTime = millis();
   }
 }
