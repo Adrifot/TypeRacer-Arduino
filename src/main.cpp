@@ -30,9 +30,7 @@ String words[] = {
     "denial", "wall", "action", "golf", "storage", "positive", "metal", "map", "arch",
     "crew", "improvement", "chicken", "banquet", "temperature", "composer", "confusion",
     "reproduction", "coverage", "exaggeration", "profession", "preference", "preparation",
-    "practice", "equinox", "trench", "crutch", "robotics", "helicopter", "zeromunca", "glue",
-    "admire", "door", "scandal", "combat", "ballet", "meaning", "coffee", "office",
-    "morality", "gift", "congress", "imposter", "haircut"
+    "practice", "equinox", "trench", "crutch"
 };
 
 // debouncing vars
@@ -173,6 +171,7 @@ void startGame() { // blink loop at the beginning of the game
 
   if (millis() - startTime >= blinkDuration) { // runs when blinking has finished
     Serial.println("START!");
+    setRGB(2);
     blinking = 0;
     gameJustStarted = 0; // Resets the start flag
     gameOn = 1; // Allows the game loop to run
@@ -187,8 +186,12 @@ void startGame() { // blink loop at the beginning of the game
       Serial.print("...\n");
       i--;
     } else {
-      setRGB(0); // turns the LED off
-      state = 0;
+      if(i==0) setRGB(2);
+      else {
+        setRGB(0); // turns the LED off
+        state = 0;
+      }
+      
     }
   }
 }
