@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <string.h>
 
 // define pins
 #define RED_PIN 5
@@ -12,14 +13,16 @@
 #define MAX_STRINGS 100
 
 // global vars
-String input = "";
+String input = "", genWord;
 int score = 0;
 unsigned long gameTime;
 int gameDuration = 30000;
-volatile int difficulty = 0; // intervals: easy - 5s, medium - 3s, hard - 1.5s
+volatile int difficulty = 0; 
 volatile int gameJustStarted = 0, gameOn = 0;
 const int blinkDuration = 3000;
 const int blinkInterval = 500;
+unsigned long typeTime;
+unsigned long gameStartTime;
 String words[] = {
     "inquiry", "illustrate", "performer", "survey", "role", "admire", "hand", "accident",
     "situation", "factory", "ignore", "guerilla", "dragon", "face", "exit", "bounce",
@@ -27,7 +30,9 @@ String words[] = {
     "denial", "wall", "action", "golf", "storage", "positive", "metal", "map", "arch",
     "crew", "improvement", "chicken", "banquet", "temperature", "composer", "confusion",
     "reproduction", "coverage", "exaggeration", "profession", "preference", "preparation",
-    "practice", "equinox", "trench", "crutch"
+    "practice", "equinox", "trench", "crutch", "robotics", "helicopter", "zeromunca", "glue",
+    "admire", "door", "scandal", "combat", "ballet", "meaning", "coffee", "office",
+    "morality", "gift", "congress", "imposter", "haircut"
 };
 
 // debouncing vars
@@ -45,6 +50,8 @@ void startGame();
 void game();
 
 void setup() {
+noInterrupts();
+
   // pin mode setups
   for (int pin = RED_PIN; pin <= BLUE_PIN; pin++) pinMode(pin, OUTPUT);
 
@@ -57,13 +64,17 @@ void setup() {
   // interrupts setup
   attachInterrupt(digitalPinToInterrupt(BTN_START), startStopISR, FALLING);
   attachInterrupt(digitalPinToInterrupt(BTN_DIFF), diffSwitchISR, FALLING);
+
+  Serial.println("Awaiting input...");
+  randomSeed(analogRead(0)); // for random generation using noise on pin A0
+
+  interrupts();
 }
 
 void loop() {
   if (gameJustStarted) {
     startGame(); // Start game logic
   }
-  
   if (gameOn) {
     game(); // Continue game logic
   }
@@ -104,34 +115,37 @@ void setRGB(int x) { // function to set RGB LED to a color
 void startStopISR() { // interrupt routine for the Start/Stop button
   interruptTime = millis();
   if (interruptTime - lastInterruptTime > debounceDelay) { // debouncing
-    if (gameOn) {
+    if (gameOn || gameJustStarted) {
       gameOn = 0;  // Stop the game immediately
-      setRGB(4);   // Set the LED to white
+      gameJustStarted = 0;
+      setRGB(4);   // Set LED to white
       Serial.println("\nGame Stopped!");
     } else {
       gameJustStarted = 1;  // Start the game if it is not running
     }
   }
-  lastInterruptTime = interruptTime;
+  lastInterruptTime = interruptTime; 
 }
 
 void diffSwitchISR() { // difficulty switch interrupt routine
   interruptTime = millis();
   if (interruptTime - lastInterruptTime > debounceDelay) { // debouncing
-    difficulty += 1 ;
-    if(difficulty >= 4) difficulty = 1;
-    switch(difficulty) {
-      case 1:
-        Serial.println("Easy mode ON. Have fun.");
-        break;
-      case 2:
-        Serial.println("Medium mode ON. Ready for a challenge?");
-        break;
-      case 3:
-        Serial.println("Hard mode ON. Prepare to lose.");
-        break;
-      default:
-        Serial.println("Error: difficulty variable out of range.");
+    if(!gameJustStarted && !gameOn) { // change difficulty only while game not active
+      difficulty += 1 ;
+      if(difficulty >= 4) difficulty = 1; // do not let difficulty fall out of range
+      switch(difficulty) {
+        case 1:
+          Serial.println("Easy mode ON. Have fun.");
+          break;
+        case 2:
+          Serial.println("Medium mode ON. Ready for a challenge?");
+          break;
+        case 3:
+          Serial.println("Hard mode ON. Prepare to lose.");
+          break;
+        default:
+          Serial.println("Error: difficulty variable out of range."); // just in case :)
+      }
     }
   }
   lastInterruptTime = interruptTime;
@@ -146,9 +160,10 @@ void startGame() { // blink loop at the beginning of the game
   static unsigned long startTime = 0;
   static unsigned long lastTime = 0;
   static int blinking = 0, state = 0;
-  static int i = 3;
+  static int i = 3; // countdown variable
+  gameStartTime = millis();  // Record the game start time
 
-  if (!blinking) {
+  if (!blinking) { // start blinking process
     blinking = 1;
     startTime = millis();
     lastTime = millis();
@@ -156,30 +171,30 @@ void startGame() { // blink loop at the beginning of the game
     Serial.println("Game starting...\n");
   }
 
-  if (millis() - startTime >= blinkDuration) {
+  if (millis() - startTime >= blinkDuration) { // runs when blinking has finished
     Serial.println("START!");
     blinking = 0;
-    gameJustStarted = 0; // Reset the start flag
-    gameOn = 1; // Allow the game loop to run
+    gameJustStarted = 0; // Resets the start flag
+    gameOn = 1; // Allows the game loop to run
   }
 
   if (millis() - lastTime >= blinkInterval) {
     lastTime = millis();
     if (!state) {
-      setRGB(4); // turn the LED white
+      setRGB(4); // turns the LED white
       state = 1;
       Serial.print(i);
       Serial.print("...\n");
       i--;
     } else {
-      setRGB(0); // turn the LED off
+      setRGB(0); // turns the LED off
       state = 0;
     }
   }
 }
 
-void game() { // main game loop
-  unsigned long typeTime;
+void game() { // main function - loops until gameDuration is exceeded.
+  
   switch (difficulty) {
     case 1:
       typeTime = 5000; // easy - 5 seconds
@@ -195,24 +210,50 @@ void game() { // main game loop
   }
 
   static unsigned long lastPrintTime = 0;
-  static unsigned long gameStartTime = millis();  // Record the game start time
 
-  // Set LED to green while the game is on and generating words
-  setRGB(2);  // Set LED to green
-
-  // Check if the game has exceeded its duration
+  // Checks if the game has exceeded its duration
   if (millis() - gameStartTime >= gameDuration) {
-    gameOn = 0;  // End the game
-    setRGB(4);   // Turn the LED white again
+    gameOn = 0;  // Ends the game
+    setRGB(4);   // Turns the LED white again
     Serial.println("\nGame Over!");
-    return;  // Exit the game function, stop word generation
+    Serial.print("Final Score: ");
+    Serial.println(score);
+    return;  // exits the game func
   }
 
   // Generate a word at the specified interval
   if (millis() - lastPrintTime >= typeTime) {
     int size = sizeof(words) / sizeof(words[0]);
-    String word = getRandomString(words, size); // Get random word
-    Serial.println(word); // Print the random word
+    genWord = getRandomString(words, size); // Get random word
+    input = "";
+    Serial.println("");
+    Serial.println(genWord); // Print the random genWord
     lastPrintTime = millis();
   }
+
+  // Check if there is serial input and handle it immediately
+  if (Serial.available() > 0) {
+    char c = Serial.read(); // read a character
+    if (c == 8 && input.length() > 0) { // handle backspace
+      input.remove(input.length()-1);
+      Serial.print("\b \b");
+    } else if (c != '\n' && c != '\r') { // ignore newline characters
+      input += c;
+      Serial.print(c); // Print the character to Serial monitor
+    }
+    
+    // Check if the input matches the generated word
+    if (genWord == input) {
+      // Serial.println("corret!");
+      setRGB(2); // set RGB LED to green
+      score++;
+      input = ""; // reset input after correct word is typed
+      Serial.println("");
+      lastPrintTime = 0; // immediately print a new word
+    } else if (input.length() > 0 && !genWord.startsWith(input)) { // detectes mismatches
+      // Serial.println("Mismatch detected!");
+      setRGB(1); // RGB red
+    } else setRGB(2); // RGB green
+  } 
 }
+
