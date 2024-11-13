@@ -4,7 +4,7 @@ This project is an Arduino-baced type-racer game. To win, you have to use the Se
 
 ## Table of Contents
 
-1. [Projeect photo](#project-photo)
+1. [Project photo](#project-photo)
 2. [Components](#components)
 3. [Schematic](#schematic)
 4. [Usage Video](#usage-video)
@@ -27,6 +27,6 @@ Both buttons use **pull-down** resistors.
 ## Schematic
 ![Schematic Image](./media/schematic.png)
 
-## Usage Video
+## Usage
 [![IMAGE ALT TEXT HERE](https://img.youtube.com/vi/Qre28xFN4pM/0.jpg)](https://www.youtube.com/watch?v=Qre28xFN4pM)
 
